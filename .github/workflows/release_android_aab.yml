@@ -1,0 +1,109 @@
+name: Android Build & Release AAB
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'android/**'
+      - 'lib/**'
+      - 'pubspec.yaml'
+      - 'trigger_build.txt'
+      - '.github/workflows/release_android_aab.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Android Build AAB
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      # 🔄 ÉTAPE D'ASPIRATION DU CODE PRIVÉ (AJOUTÉE)
+      - name: Checkout Private Code
+        uses: actions/checkout@v4
+        with:
+          repository: 'H-DEV-243/H_BIBLE'
+          token: ${{ secrets.GH_PRIVATE_TOKEN }}
+          ref: 'main'
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Decode Keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/app/upload-keystore.jks
+
+      - name: Create key.properties
+        run: |
+          echo "storePassword=${{ secrets.ANDROID_STORE_PASSWORD }}" > android/key.properties
+          echo "keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}" >> android/key.properties
+          echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}" >> android/key.properties
+          echo "storeFile=upload-keystore.jks" >> android/key.properties
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Get Version from Firestore
+        id: get_version
+        run: |
+          npm install firebase-admin
+          node scripts/get_version.js
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+
+      - name: Install Python dependencies
+        run: pip install --quiet sqlite3 2>/dev/null || true
+
+      - name: Generate Binary Databases
+        run: python scripts/compress_to_bin.py
+
+      - name: Calculate Version Code
+        id: calc_version_code
+        run: echo "VERSION_CODE=$((10000 + ${{ github.run_number }}))" >> $GITHUB_OUTPUT
+
+      - name: Build AAB
+        run: |
+          flutter build appbundle --release --obfuscate --split-debug-info=build/native-debug-symbols --build-name=${{ steps.get_version.outputs.VERSION }} --build-number=${{ steps.calc_version_code.outputs.VERSION_CODE }} --android-skip-build-dependency-validation
+
+      - name: Create GitHub Release (PRIVATE)
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "build/app/outputs/bundle/release/app-release.aab"
+          tag: v${{ steps.get_version.outputs.VERSION }}.AAB
+          name: Android Release ${{ steps.get_version.outputs.VERSION }} (.AAB)
+          allowUpdates: true
+          replacesArtifacts: true
+          body: |
+            ## Build Android AAB Automatique (Play Store)
+            - Version : ${{ steps.get_version.outputs.VERSION }}
+            - Format : App Bundle (.aab)
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Ruby (pour Fastlane) 💎
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+
+      - name: Installer Fastlane ⚙️
+        run: gem install fastlane
+
+      - name: Envoyer sur Google Play Store via Fastlane 🚀
+        env:
+          SUPPLY_JSON_KEY_DATA: ${{ secrets.PLAY_STORE_JSON }}
+        run: |
+          fastlane run supply \
+            package_name:"com.h.h_bible" \
+            aab:"build/app/outputs/bundle/release/app-release.aab" \
+            track:"internal" \
+            in_app_update_priority:5
