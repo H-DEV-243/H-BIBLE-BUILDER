@@ -1,7 +1,17 @@
 name: Android Build & Release
 
 on:
-  workflow_dispatch: # Déclenchement manuel via PowerShell ou l'interface
+  push:
+    branches:
+      - main
+    paths:
+      - 'android/**'
+      - 'lib/**'
+      - 'pubspec.yaml'
+      - 'trigger_build.txt'
+      - '.github/workflows/deploy_web.yml'
+      - '.github/workflows/release_android.yml'
+  workflow_dispatch:
 
 jobs:
   build:
@@ -11,8 +21,8 @@ jobs:
       contents: write
 
     steps:
-      # 🚀 ASPIRATION DU CODE PRIVÉ
-      - name: Checkout code
+      # 🔄 ÉTAPE D'ASPIRATION DU CODE PRIVÉ (AJOUTÉE)
+      - name: Checkout Private Code
         uses: actions/checkout@v4
         with:
           repository: 'H-DEV-243/H_BIBLE'
