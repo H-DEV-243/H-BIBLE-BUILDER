@@ -1,0 +1,56 @@
+name: Auto Sync Firestore to Build
+
+on:
+  schedule:
+    - cron: '*/10 * * * *' # Vérification toutes les 10 minutes (Gratuit)
+  workflow_dispatch: # Permet aussi de le lancer manuellement
+
+jobs:
+  check-and-trigger:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      # 🔄 ÉTAPE D'ASPIRATION DU CODE PRIVÉ (AJOUTÉE)
+      - name: Checkout Private Code
+        uses: actions/checkout@v4
+        with:
+          repository: 'H-DEV-243/H_BIBLE'
+          token: ${{ secrets.GH_PRIVATE_TOKEN }}
+          ref: 'main'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Firebase Admin
+        run: npm install firebase-admin
+
+      - name: Get Version from Firestore
+        id: firestore
+        run: node scripts/get_version.js
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+
+      - name: Get Latest GitHub Release
+        id: github
+        run: |
+          # On récupère le dernier tag de release, on enlève le "v" au début et on enlève le ".AAB" à la fin si présent
+          LATEST_TAG=$(gh release list --limit 1 --json tagName --jq '.[0].tagName' | sed 's/^v//' | sed 's/\.AAB$//')
+          echo "LATEST=$LATEST_TAG" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compare and Trigger Build
+        if: steps.firestore.outputs.VERSION != steps.github.outputs.LATEST
+        run: |
+          echo "🚀 Décalage détecté !"
+          echo "Firestore: ${{ steps.firestore.outputs.VERSION }}"
+          echo "GitHub: ${{ steps.github.outputs.LATEST }}"
+          echo "Déclenchement du build Android (APK + AAB)..."
+          gh workflow run release_android.yml
+          gh workflow run release_android_aab.yml
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
