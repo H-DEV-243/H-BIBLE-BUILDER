@@ -69,7 +69,7 @@ jobs:
 
       - name: Calculate Version Code
         id: calc_version_code
-        run: echo "VERSION_CODE=$((10000 + ${{ github.run_number }}))" >> $GITHUB_OUTPUT
+        run: echo "VERSION_CODE=$((10084 + ${{ github.run_number }}))" >> $GITHUB_OUTPUT
 
       - name: Build AAB
         run: |
