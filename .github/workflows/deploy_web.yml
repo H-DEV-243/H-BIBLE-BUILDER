@@ -1,0 +1,66 @@
+name: Web Deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'web/**'
+      - 'lib/**'
+      - 'pubspec.yaml'
+      - 'trigger_build.txt'
+      - '.github/workflows/deploy_web.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Web Build & Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      # 🔄 ÉTAPE D'ASPIRATION DU CODE PRIVÉ (AJOUTÉE)
+      - name: Checkout Private Code
+        uses: actions/checkout@v4
+        with:
+          repository: 'H-DEV-243/H_BIBLE'
+          token: ${{ secrets.GH_PRIVATE_TOKEN }}
+          ref: 'main'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'main'
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Get Version from Trigger
+        id: get_version
+        run: |
+          if [ -f trigger_build.txt ]; then
+            VERSION=$(cat trigger_build.txt | head -n 1)
+          else
+            VERSION="H-B.1.$(date +'%H.%M.%S.%-d.%-m.%Y')"
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Install Python dependencies
+        run: pip install --quiet sqlite3 2>/dev/null || true
+
+      - name: Generate Binary Databases
+        run: python scripts/compress_to_bin.py
+
+      - name: Build Web
+        run: |
+          flutter build web --release --base-href / --build-name="${{ steps.get_version.outputs.VERSION }}"
+
+      - name: Generate SEO Previews
+        run: dart scripts/generate_previews.dart
+
+      - name: Deploy to Firebase Hosting
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: '${{ secrets.GITHUB_TOKEN }}'
+          firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}'
+          channelId: live
+          projectId: h-bible
