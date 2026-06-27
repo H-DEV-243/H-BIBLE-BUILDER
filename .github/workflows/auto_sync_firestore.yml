@@ -37,8 +37,8 @@ jobs:
       - name: Get Latest GitHub Release
         id: github
         run: |
-          # On récupère le dernier tag de release, on enlève le "v" au début et on enlève le ".AAB" à la fin si présent
-          LATEST_TAG=$(gh release list --limit 1 --json tagName --jq '.[0].tagName' | sed 's/^v//' | sed 's/\.AAB$//')
+          # On récupère le dernier tag de release sur le BUILDER REPO
+          LATEST_TAG=$(gh release list --repo H-DEV-243/H-BIBLE-BUILDER --limit 1 --json tagName --jq '.[0].tagName' | sed 's/^v//' | sed 's/\.AAB$//')
           echo "LATEST=$LATEST_TAG" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -50,7 +50,7 @@ jobs:
           echo "Firestore: ${{ steps.firestore.outputs.VERSION }}"
           echo "GitHub: ${{ steps.github.outputs.LATEST }}"
           echo "Déclenchement du build Android (APK + AAB)..."
-          gh workflow run release_android.yml
-          gh workflow run release_android_aab.yml
+          gh workflow run release_android.yml --repo H-DEV-243/H-BIBLE-BUILDER --ref main
+          gh workflow run release_android_aab.yml --repo H-DEV-243/H-BIBLE-BUILDER --ref main
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
